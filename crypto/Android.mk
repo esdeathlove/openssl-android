@@ -6,7 +6,7 @@ arm_src_files := \
     bn/asm/armv4-mont.S \
     sha/asm/sha1-armv4-large.S \
     sha/asm/sha256-armv4.S \
-    sha/asm/sha512-armv4.S 
+    sha/asm/sha512-armv4.S
 
 non_arm_src_files := aes/aes_core.c
 
@@ -545,7 +545,7 @@ local_c_includes := \
 	$(NDK_PROJECT_PATH)/jni/openssl/crypto/evp \
 	$(NDK_PROJECT_PATH)/jni/openssl/include \
 	$(NDK_PROJECT_PATH)/jni/openssl/include/openssl
-	
+
 local_c_flags := -DNO_WINDOWS_BRAINDEATH
 
 #######################################

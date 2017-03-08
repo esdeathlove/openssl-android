@@ -1,4 +1,11 @@
-#!/usr/bin/env perl
+#! /usr/bin/env perl
+# Copyright 2007-2016 The OpenSSL Project Authors. All Rights Reserved.
+#
+# Licensed under the OpenSSL license (the "License").  You may not use
+# this file except in compliance with the License.  You can obtain a copy
+# in the file LICENSE in the source distribution or at
+# https://www.openssl.org/source/license.html
+
 
 # ====================================================================
 # Written by Andy Polyakov <appro@fy.chalmers.se> for the OpenSSL
@@ -92,7 +99,7 @@ if ($flavour =~ /3[12]/) {
 	$g="g";
 }
 
-while (($output=shift) && ($output!~/^\w[\w\-]*\.\w+$/)) {}
+while (($output=shift) && ($output!~/\w[\w\-]*\.\w+$/)) {}
 open STDOUT,">$output";
 
 $softonly=0;	# allow hardware support
@@ -397,7 +404,7 @@ _s390x_AES_encrypt:
 	or	$s1,$t1
 	or	$t2,$i2
 	or	$t3,$i3
-	
+
 	srlg	$i1,$s2,`8-3`	# i0
 	srlg	$i2,$s2,`16-3`	# i1
 	nr	$i1,$mask
@@ -450,7 +457,7 @@ _s390x_AES_encrypt:
 	x	$s2,24($key)
 	x	$s3,28($key)
 
-	br	$ra	
+	br	$ra
 .size	_s390x_AES_encrypt,.-_s390x_AES_encrypt
 ___
 
@@ -772,17 +779,17 @@ _s390x_AES_decrypt:
 	x	$s2,24($key)
 	x	$s3,28($key)
 
-	br	$ra	
+	br	$ra
 .size	_s390x_AES_decrypt,.-_s390x_AES_decrypt
 ___
 
 $code.=<<___;
 # void AES_set_encrypt_key(const unsigned char *in, int bits,
 # 		 AES_KEY *key) {
-.globl	private_AES_set_encrypt_key
-.type	private_AES_set_encrypt_key,\@function
+.globl	AES_set_encrypt_key
+.type	AES_set_encrypt_key,\@function
 .align	16
-private_AES_set_encrypt_key:
+AES_set_encrypt_key:
 _s390x_AES_set_encrypt_key:
 	lghi	$t0,0
 	cl${g}r	$inp,$t0
@@ -818,13 +825,9 @@ $code.=<<___ if (!$softonly);
 	tmhl	%r0,0x4000	# check for message-security assist
 	jz	.Lekey_internal
 
-	lghi	%r0,0		# query capability vector
-	la	%r1,16($sp)
-	.long	0xb92f0042	# kmc %r4,%r2
-
-	llihh	%r1,0x8000
-	srlg	%r1,%r1,0(%r5)
-	ng	%r1,16($sp)
+	llihh	%r0,0x8000
+	srlg	%r0,%r0,0(%r5)
+	ng	%r0,48(%r1)	# check kmc capability vector
 	jz	.Lekey_internal
 
 	lmg	%r0,%r1,0($inp)	# just copy 128 bits...
@@ -1063,14 +1066,14 @@ $code.=<<___;
 .Lminus1:
 	lghi	%r2,-1
 	br	$ra
-.size	private_AES_set_encrypt_key,.-private_AES_set_encrypt_key
+.size	AES_set_encrypt_key,.-AES_set_encrypt_key
 
 # void AES_set_decrypt_key(const unsigned char *in, int bits,
 # 		 AES_KEY *key) {
-.globl	private_AES_set_decrypt_key
-.type	private_AES_set_decrypt_key,\@function
+.globl	AES_set_decrypt_key
+.type	AES_set_decrypt_key,\@function
 .align	16
-private_AES_set_decrypt_key:
+AES_set_decrypt_key:
 	#st${g}	$key,4*$SIZE_T($sp)	# I rely on AES_set_encrypt_key to
 	st${g}	$ra,14*$SIZE_T($sp)	# save non-volatile registers and $key!
 	bras	$ra,_s390x_AES_set_encrypt_key
@@ -1170,7 +1173,7 @@ $code.=<<___;
 	lm${g}	%r6,%r13,6*$SIZE_T($sp)# as was saved by AES_set_encrypt_key!
 	lghi	%r2,0
 	br	$ra
-.size	private_AES_set_decrypt_key,.-private_AES_set_decrypt_key
+.size	AES_set_decrypt_key,.-AES_set_decrypt_key
 ___
 
 ########################################################################
@@ -1294,7 +1297,7 @@ $code.=<<___;
 .Lcbc_enc_done:
 	l${g}	$ivp,6*$SIZE_T($sp)
 	st	$s0,0($ivp)
-	st	$s1,4($ivp)	
+	st	$s1,4($ivp)
 	st	$s2,8($ivp)
 	st	$s3,12($ivp)
 
@@ -1444,13 +1447,10 @@ $code.=<<___ if (0);	######### kmctr code was measured to be ~12% slower
 
 	llgfr	$s0,%r0
 	lgr	$s1,%r1
-	lghi	%r0,0
-	la	%r1,16($sp)
-	.long	0xb92d2042	# kmctr %r4,%r2,%r2
-
+	larl	%r1,OPENSSL_s390xcap_P
 	llihh	%r0,0x8000	# check if kmctr supports the function code
 	srlg	%r0,%r0,0($s0)
-	ng	%r0,16($sp)
+	ng	%r0,64(%r1)	# check kmctr capability vector
 	lgr	%r0,$s0
 	lgr	%r1,$s1
 	jz	.Lctr32_km_loop
@@ -1575,8 +1575,8 @@ ___
 }
 
 ########################################################################
-# void AES_xts_encrypt(const char *inp,char *out,size_t len,
-#	const AES_KEY *key1, const AES_KEY *key2,
+# void AES_xts_encrypt(const unsigned char *inp, unsigned char *out,
+#	size_t len, const AES_KEY *key1, const AES_KEY *key2,
 #	const unsigned char iv[16]);
 #
 {
@@ -1597,12 +1597,10 @@ $code.=<<___ if(1);
 	llgfr	$s0,%r0			# put aside the function code
 	lghi	$s1,0x7f
 	nr	$s1,%r0
-	lghi	%r0,0			# query capability vector
-	la	%r1,2*$SIZE_T($sp)
-	.long	0xb92e0042		# km %r4,%r2
-	llihh	%r1,0x8000
-	srlg	%r1,%r1,32($s1)		# check for 32+function code
-	ng	%r1,2*$SIZE_T($sp)
+	larl	%r1,OPENSSL_s390xcap_P
+	llihh	%r0,0x8000
+	srlg	%r0,%r0,32($s1)		# check for 32+function code
+	ng	%r0,32(%r1)		# check km capability vector
 	lgr	%r0,$s0			# restore the function code
 	la	%r1,0($key1)		# restore $key1
 	jz	.Lxts_km_vanilla
@@ -1628,7 +1626,7 @@ $code.=<<___ if(1);
 
 	lrvg	$s0,$tweak+0($sp)	# load the last tweak
 	lrvg	$s1,$tweak+8($sp)
-	stmg	%r0,%r3,$tweak-32(%r1)	# wipe copy of the key
+	stmg	%r0,%r3,$tweak-32($sp)	# wipe copy of the key
 
 	nill	%r0,0xffdf		# switch back to original function code
 	la	%r1,0($key1)		# restore pointer to $key1
@@ -1637,7 +1635,7 @@ $code.=<<___ if(1);
 	llgc	$len,2*$SIZE_T-1($sp)
 	nill	$len,0x0f		# $len%=16
 	br	$ra
-	
+
 .align	16
 .Lxts_km_vanilla:
 ___
@@ -1684,11 +1682,9 @@ $code.=<<___;
 	lghi	$i1,0x87
 	srag	$i2,$s1,63		# broadcast upper bit
 	ngr	$i1,$i2			# rem
-	srlg	$i2,$s0,63		# carry bit from lower half
-	sllg	$s0,$s0,1
-	sllg	$s1,$s1,1
+	algr	$s0,$s0
+	alcgr	$s1,$s1
 	xgr	$s0,$i1
-	ogr	$s1,$i2
 .Lxts_km_start:
 	lrvgr	$i1,$s0			# flip byte order
 	lrvgr	$i2,$s1
@@ -1745,11 +1741,9 @@ $code.=<<___;
 	lghi	$i1,0x87
 	srag	$i2,$s1,63		# broadcast upper bit
 	ngr	$i1,$i2			# rem
-	srlg	$i2,$s0,63		# carry bit from lower half
-	sllg	$s0,$s0,1
-	sllg	$s1,$s1,1
+	algr	$s0,$s0
+	alcgr	$s1,$s1
 	xgr	$s0,$i1
-	ogr	$s1,$i2
 
 	ltr	$len,$len		# clear zero flag
 	br	$ra
@@ -1781,8 +1775,8 @@ $code.=<<___ if (!$softonly);
 	clr	%r0,%r1
 	jl	.Lxts_enc_software
 
+	st${g}	$ra,5*$SIZE_T($sp)
 	stm${g}	%r6,$s3,6*$SIZE_T($sp)
-	st${g}	$ra,14*$SIZE_T($sp)
 
 	sllg	$len,$len,4		# $len&=~15
 	slgr	$out,$inp
@@ -1830,9 +1824,9 @@ $code.=<<___ if (!$softonly);
 	stg	$i2,8($i3)
 
 .Lxts_enc_km_done:
-	l${g}	$ra,14*$SIZE_T($sp)
-	st${g}	$sp,$tweak($sp)		# wipe tweak
-	st${g}	$sp,$tweak($sp)
+	stg	$sp,$tweak+0($sp)	# wipe tweak
+	stg	$sp,$tweak+8($sp)
+	l${g}	$ra,5*$SIZE_T($sp)
 	lm${g}	%r6,$s3,6*$SIZE_T($sp)
 	br	$ra
 .align	16
@@ -1843,12 +1837,11 @@ $code.=<<___;
 
 	slgr	$out,$inp
 
-	xgr	$s0,$s0			# clear upper half
-	xgr	$s1,$s1
-	lrv	$s0,$stdframe+4($sp)	# load secno
-	lrv	$s1,$stdframe+0($sp)
-	xgr	$s2,$s2
-	xgr	$s3,$s3
+	l${g}	$s3,$stdframe($sp)	# ivp
+	llgf	$s0,0($s3)		# load iv
+	llgf	$s1,4($s3)
+	llgf	$s2,8($s3)
+	llgf	$s3,12($s3)
 	stm${g}	%r2,%r5,2*$SIZE_T($sp)
 	la	$key,0($key2)
 	larl	$tbl,AES_Te
@@ -1864,14 +1857,12 @@ $code.=<<___;
 	lghi	%r1,0x87
 	srag	%r0,$s3,63		# broadcast upper bit
 	ngr	%r1,%r0			# rem
-	srlg	%r0,$s1,63		# carry bit from lower half
-	sllg	$s1,$s1,1
-	sllg	$s3,$s3,1
+	algr	$s1,$s1
+	alcgr	$s3,$s3
 	xgr	$s1,%r1
-	ogr	$s3,%r0
 	lrvgr	$s1,$s1			# flip byte order
 	lrvgr	$s3,$s3
-	srlg	$s0,$s1,32		# smash the tweak to 4x32-bits 
+	srlg	$s0,$s1,32		# smash the tweak to 4x32-bits
 	stg	$s1,$tweak+0($sp)	# save the tweak
 	llgfr	$s1,$s1
 	srlg	$s2,$s3,32
@@ -1917,14 +1908,12 @@ $code.=<<___;
 	lghi	%r1,0x87
 	srag	%r0,$s3,63		# broadcast upper bit
 	ngr	%r1,%r0			# rem
-	srlg	%r0,$s1,63		# carry bit from lower half
-	sllg	$s1,$s1,1
-	sllg	$s3,$s3,1
+	algr	$s1,$s1
+	alcgr	$s3,$s3
 	xgr	$s1,%r1
-	ogr	$s3,%r0
 	lrvgr	$s1,$s1			# flip byte order
 	lrvgr	$s3,$s3
-	srlg	$s0,$s1,32		# smash the tweak to 4x32-bits 
+	srlg	$s0,$s1,32		# smash the tweak to 4x32-bits
 	stg	$s1,$tweak+0($sp)	# save the tweak
 	llgfr	$s1,$s1
 	srlg	$s2,$s3,32
@@ -1955,8 +1944,9 @@ $code.=<<___;
 	br	$ra
 .size	AES_xts_encrypt,.-AES_xts_encrypt
 ___
-# void AES_xts_decrypt(const char *inp,char *out,size_t len,
-#	const AES_KEY *key1, const AES_KEY *key2,u64 secno);
+# void AES_xts_decrypt(const unsigned char *inp, unsigned char *out,
+#	size_t len, const AES_KEY *key1, const AES_KEY *key2,
+#	const unsigned char iv[16]);
 #
 $code.=<<___;
 .globl	AES_xts_decrypt
@@ -1988,8 +1978,8 @@ $code.=<<___ if (!$softonly);
 	clr	%r0,%r1
 	jl	.Lxts_dec_software
 
+	st${g}	$ra,5*$SIZE_T($sp)
 	stm${g}	%r6,$s3,6*$SIZE_T($sp)
-	st${g}	$ra,14*$SIZE_T($sp)
 
 	nill	$len,0xfff0		# $len&=~15
 	slgr	$out,$inp
@@ -2028,11 +2018,9 @@ $code.=<<___ if (!$softonly);
 	lghi	$i1,0x87
 	srag	$i2,$s1,63		# broadcast upper bit
 	ngr	$i1,$i2			# rem
-	srlg	$i2,$s0,63		# carry bit from lower half
-	sllg	$s0,$s0,1
-	sllg	$s1,$s1,1
+	algr	$s0,$s0
+	alcgr	$s1,$s1
 	xgr	$s0,$i1
-	ogr	$s1,$i2
 	lrvgr	$i1,$s0			# flip byte order
 	lrvgr	$i2,$s1
 
@@ -2075,9 +2063,9 @@ $code.=<<___ if (!$softonly);
 	stg	$s2,0($i3)
 	stg	$s3,8($i3)
 .Lxts_dec_km_done:
-	l${g}	$ra,14*$SIZE_T($sp)
-	st${g}	$sp,$tweak($sp)		# wipe tweak
-	st${g}	$sp,$tweak($sp)
+	stg	$sp,$tweak+0($sp)	# wipe tweak
+	stg	$sp,$tweak+8($sp)
+	l${g}	$ra,5*$SIZE_T($sp)
 	lm${g}	%r6,$s3,6*$SIZE_T($sp)
 	br	$ra
 .align	16
@@ -2089,12 +2077,11 @@ $code.=<<___;
 	srlg	$len,$len,4
 	slgr	$out,$inp
 
-	xgr	$s0,$s0			# clear upper half
-	xgr	$s1,$s1
-	lrv	$s0,$stdframe+4($sp)	# load secno
-	lrv	$s1,$stdframe+0($sp)
-	xgr	$s2,$s2
-	xgr	$s3,$s3
+	l${g}	$s3,$stdframe($sp)	# ivp
+	llgf	$s0,0($s3)		# load iv
+	llgf	$s1,4($s3)
+	llgf	$s2,8($s3)
+	llgf	$s3,12($s3)
 	stm${g}	%r2,%r5,2*$SIZE_T($sp)
 	la	$key,0($key2)
 	larl	$tbl,AES_Te
@@ -2113,14 +2100,12 @@ $code.=<<___;
 	lghi	%r1,0x87
 	srag	%r0,$s3,63		# broadcast upper bit
 	ngr	%r1,%r0			# rem
-	srlg	%r0,$s1,63		# carry bit from lower half
-	sllg	$s1,$s1,1
-	sllg	$s3,$s3,1
+	algr	$s1,$s1
+	alcgr	$s3,$s3
 	xgr	$s1,%r1
-	ogr	$s3,%r0
 	lrvgr	$s1,$s1			# flip byte order
 	lrvgr	$s3,$s3
-	srlg	$s0,$s1,32		# smash the tweak to 4x32-bits 
+	srlg	$s0,$s1,32		# smash the tweak to 4x32-bits
 	stg	$s1,$tweak+0($sp)	# save the tweak
 	llgfr	$s1,$s1
 	srlg	$s2,$s3,32
@@ -2156,11 +2141,9 @@ $code.=<<___;
 	lghi	%r1,0x87
 	srag	%r0,$s3,63		# broadcast upper bit
 	ngr	%r1,%r0			# rem
-	srlg	%r0,$s1,63		# carry bit from lower half
-	sllg	$s1,$s1,1
-	sllg	$s3,$s3,1
+	algr	$s1,$s1
+	alcgr	$s3,$s3
 	xgr	$s1,%r1
-	ogr	$s3,%r0
 	lrvgr	$i2,$s1			# flip byte order
 	lrvgr	$i3,$s3
 	stmg	$i2,$i3,$tweak($sp)	# save the 1st tweak
@@ -2176,11 +2159,9 @@ $code.=<<___;
 	lghi	%r1,0x87
 	srag	%r0,$s3,63		# broadcast upper bit
 	ngr	%r1,%r0			# rem
-	srlg	%r0,$s1,63		# carry bit from lower half
-	sllg	$s1,$s1,1
-	sllg	$s3,$s3,1
+	algr	$s1,$s1
+	alcgr	$s3,$s3
 	xgr	$s1,%r1
-	ogr	$s3,%r0
 	lrvgr	$s1,$s1			# flip byte order
 	lrvgr	$s3,$s3
 	srlg	$s0,$s1,32		# smash the tweak to 4x32-bits
@@ -2246,7 +2227,7 @@ ___
 }
 $code.=<<___;
 .string	"AES for s390x, CRYPTOGAMS by <appro\@openssl.org>"
-.comm	OPENSSL_s390xcap_P,16,8
+.comm	OPENSSL_s390xcap_P,80,8
 ___
 
 $code =~ s/\`([^\`]*)\`/eval $1/gem;

@@ -27,9 +27,9 @@
  */
 # define OPENSSL_VERSION_NUMBER  0x1000113fL
 # ifdef OPENSSL_FIPS
-#  define OPENSSL_VERSION_TEXT    "OpenSSL 1.0.1s-fips  1 Mar 2016"
+#  define OPENSSL_VERSION_TEXT    "OpenSSL 1.1.0s-fips  8 Mar 2017"
 # else
-#  define OPENSSL_VERSION_TEXT    "OpenSSL 1.0.1s  1 Mar 2016"
+#  define OPENSSL_VERSION_TEXT    "OpenSSL 1.1.0s  8 Mar 2017"
 # endif
 # define OPENSSL_VERSION_PTEXT   " part of " OPENSSL_VERSION_TEXT
 
